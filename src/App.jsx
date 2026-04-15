@@ -120,6 +120,9 @@ export default function App() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; overflow: hidden; }
         body { background: oklch(14% 0.012 65); color: oklch(85% 0.04 75); font-family: 'Space Grotesk', sans-serif; }
+        /* dvh adjusts as the browser address bar shows/hides on mobile,
+           preventing the bottom controls from being clipped behind it. */
+        .app-root { height: 100vh; height: 100dvh; }
         button { cursor: pointer; border: none; font-family: inherit; transition: all 0.12s; }
         select { font-family: inherit; outline: none; cursor: pointer; }
         input  { font-family: inherit; outline: none; }
@@ -166,7 +169,7 @@ export default function App() {
         }
       `}</style>
 
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <div className="app-root" style={{ display: "flex", flexDirection: "column" }}>
 
         {/* ── Header */}
         <header style={{
