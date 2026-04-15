@@ -8,7 +8,7 @@
  * Game-loop hook  → useGameLoop.js
  */
 
-import { useState, useRef, useLayoutEffect } from "react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { PRESETS, getTileColors, tileFontSize, BOARD_PAD, TILE_GAP } from "./constants.js";
 import { useStoredStrategies } from "./useStorage.js";
 import { useEditor } from "./useEditor.js";
@@ -41,6 +41,20 @@ export default function App() {
   // ── Save-dialog UI state
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
+
+  // ── Responsive: mobile detection via matchMedia
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 768
+  );
+  // "game" | "code"
+  const [activeTab, setActiveTab] = useState("game");
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const handleSave = () => {
     const name = saveName.trim();
@@ -84,6 +98,17 @@ export default function App() {
 
   const maxTile = Math.max(2, ...tiles.map((t) => t.value));
 
+  // ── On mobile, switch to the game tab whenever Run is triggered
+  const handleRun = () => {
+    if (isMobile) setActiveTab("game");
+    run();
+  };
+
+  // ── Shared button styles to reduce repetition
+  const ctrlBtnBase = {
+    borderRadius: 5, fontSize: 13, fontWeight: 600,
+  };
+
   // ═══════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════
@@ -123,12 +148,22 @@ export default function App() {
 
         @media (prefers-reduced-motion: reduce) {
           .tile-outer, .tile-face { transition: none !important; animation: none !important; }
+          .panel-slide { transition: none !important; }
         }
 
         .chip-btn:hover  { background: oklch(24% 0.016 65) !important; color: oklch(85% 0.04 75) !important; }
         .del-btn:hover   { color: oklch(68% 0.18 22) !important; background: oklch(22% 0.05 22) !important; }
         .ctrl-btn:hover:not(:disabled) { filter: brightness(1.12); }
         .reset-btn:hover { background: oklch(23% 0.016 65) !important; color: oklch(80% 0.04 75) !important; }
+        .tab-btn:active  { background: oklch(20% 0.015 65) !important; }
+
+        /* ── Mobile: larger touch targets & layout tweaks */
+        @media (max-width: 767px) {
+          .ctrl-btn  { min-height: 44px; }
+          .reset-btn { min-height: 44px !important; font-size: 14px !important; }
+          .tab-btn   { min-height: 44px; }
+          .header-tagline { display: none; }
+        }
       `}</style>
 
       <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -150,7 +185,7 @@ export default function App() {
           <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.025em" }}>
             2048 <span style={{ color: "oklch(75% 0.18 75)" }}>Strategizer</span>
           </span>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: "oklch(38% 0.020 65)", letterSpacing: "0.08em" }}>
+          <span className="header-tagline" style={{ marginLeft: "auto", fontSize: 11, color: "oklch(38% 0.020 65)", letterSpacing: "0.08em" }}>
             WRITE · RUN · CONQUER
           </span>
         </header>
@@ -168,20 +203,62 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Two-column layout */}
-        <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "1fr 312px", overflow: "hidden" }}>
-
-          {/* ════ LEFT: Editor Panel ════ */}
+        {/* ── Mobile tab bar — sits between header and content */}
+        {isMobile && (
           <div style={{
-            display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden",
-            borderRight: "1px solid oklch(22% 0.016 65)",
+            flexShrink: 0, display: "flex",
+            background: "oklch(15% 0.012 65)",
+            borderBottom: "1px solid oklch(22% 0.016 65)",
           }}>
+            {[["game", "⊞ Board"], ["code", "</> Code"]].map(([tab, label]) => (
+              <button
+                key={tab}
+                className="tab-btn"
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  flex: 1, border: "none", padding: "11px 8px",
+                  background: "transparent", fontFamily: "inherit", cursor: "pointer",
+                  color: activeTab === tab ? "oklch(75% 0.18 75)" : "oklch(46% 0.022 65)",
+                  fontSize: 13, fontWeight: activeTab === tab ? 600 : 400,
+                  borderBottom: `2px solid ${activeTab === tab ? "oklch(75% 0.18 75)" : "transparent"}`,
+                  transition: "color 0.15s, border-color 0.15s",
+                }}
+              >{label}</button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Main content area
+              Desktop: CSS grid side-by-side  (editor | board)
+              Mobile:  absolute-positioned panels that slide left/right.
+                       Both panels are always mounted so CodeMirror initialises
+                       with real dimensions regardless of which tab is active. */}
+        <div style={{
+          flex: 1, minHeight: 0,
+          position: "relative", overflow: "hidden",
+          ...(isMobile ? {} : { display: "grid", gridTemplateColumns: "1fr 312px" }),
+        }}>
+
+          {/* ════ LEFT / CODE panel ════ */}
+          <div
+            className="panel-slide"
+            style={{
+              // Mobile: fill the whole area, slide off-screen when game tab is active
+              ...(isMobile ? {
+                position: "absolute", inset: 0,
+                transform: activeTab === "code" ? "translateX(0)" : "translateX(-100%)",
+                transition: "transform 220ms cubic-bezier(0.25, 1, 0.5, 1)",
+              } : {}),
+              display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden",
+              borderRight: isMobile ? "none" : "1px solid oklch(22% 0.016 65)",
+            }}
+          >
 
             {/* Toolbar */}
             <div style={{
               flexShrink: 0, padding: "8px 12px",
               background: "oklch(16% 0.013 65)", borderBottom: "1px solid oklch(22% 0.016 65)",
-              display: "flex", alignItems: "center", gap: 7,
+              display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap",
             }}>
               <select value={selectedPreset} onChange={(e) => handlePresetChange(e.target.value)}
                 style={{ background: "oklch(21% 0.015 65)", color: "oklch(78% 0.04 75)", border: "1px solid oklch(28% 0.018 65)", borderRadius: 5, padding: "5px 9px", fontSize: 12 }}>
@@ -256,37 +333,68 @@ export default function App() {
             {/* CodeMirror mount point */}
             <div ref={editorContainerRef} style={{ flex: 1, minHeight: 0, overflow: "hidden" }} />
 
-            {/* Controls bar */}
+            {/* Controls bar — stacks vertically on mobile for thumb-friendliness */}
             <div style={{
               flexShrink: 0, padding: "10px 12px",
               background: "oklch(16% 0.013 65)", borderTop: "1px solid oklch(22% 0.016 65)",
-              display: "flex", alignItems: "center", gap: 8,
+              display: "flex",
+              flexDirection: isMobile ? "column" : "row",
+              alignItems: isMobile ? "stretch" : "center",
+              gap: 8,
             }}>
-              <button className="ctrl-btn" onClick={run} disabled={isRunning}
-                style={{ background: isRunning ? "oklch(48% 0.11 75)" : "oklch(75% 0.18 75)", color: "oklch(14% 0.012 65)", padding: "7px 17px", borderRadius: 5, fontSize: 13, fontWeight: 600, opacity: isRunning ? 0.55 : 1 }}>
-                ▶ Run
-              </button>
-              <button className="ctrl-btn" onClick={step} disabled={isRunning || gameOver}
-                style={{ background: "oklch(21% 0.015 65)", color: (isRunning || gameOver) ? "oklch(38% 0.020 65)" : "oklch(78% 0.04 75)", border: "1px solid oklch(27% 0.017 65)", padding: "7px 13px", borderRadius: 5, fontSize: 13, fontWeight: 500 }}>
-                → Step
-              </button>
-              <button className="ctrl-btn" onClick={stop} disabled={!isRunning}
-                style={{ background: "oklch(21% 0.015 65)", color: !isRunning ? "oklch(38% 0.020 65)" : "oklch(68% 0.12 25)", border: "1px solid oklch(27% 0.017 65)", padding: "7px 13px", borderRadius: 5, fontSize: 13, fontWeight: 500 }}>
-                ■ Stop
-              </button>
-              <div style={{ flex: 1 }} />
-              <span style={{ fontSize: 11, color: "oklch(46% 0.022 65)", minWidth: 36, textAlign: "right" }}>{speed}×/s</span>
-              <input type="range" min={1} max={50} value={speed} onChange={(e) => setSpeed(Number(e.target.value))}
-                style={{ width: 88, accentColor: "oklch(75% 0.18 75)" }} />
+              {/* Run / Step / Stop row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button className="ctrl-btn" onClick={handleRun} disabled={isRunning}
+                  style={{ ...ctrlBtnBase, flex: isMobile ? 1 : "unset", background: isRunning ? "oklch(48% 0.11 75)" : "oklch(75% 0.18 75)", color: "oklch(14% 0.012 65)", padding: "7px 17px", opacity: isRunning ? 0.55 : 1 }}>
+                  ▶ Run
+                </button>
+                <button className="ctrl-btn" onClick={step} disabled={isRunning || gameOver}
+                  style={{ ...ctrlBtnBase, flex: isMobile ? 1 : "unset", background: "oklch(21% 0.015 65)", color: (isRunning || gameOver) ? "oklch(38% 0.020 65)" : "oklch(78% 0.04 75)", border: "1px solid oklch(27% 0.017 65)", padding: "7px 13px" }}>
+                  → Step
+                </button>
+                <button className="ctrl-btn" onClick={stop} disabled={!isRunning}
+                  style={{ ...ctrlBtnBase, flex: isMobile ? 1 : "unset", background: "oklch(21% 0.015 65)", color: !isRunning ? "oklch(38% 0.020 65)" : "oklch(68% 0.12 25)", border: "1px solid oklch(27% 0.017 65)", padding: "7px 13px" }}>
+                  ■ Stop
+                </button>
+                {/* Speed controls inline on desktop */}
+                {!isMobile && (
+                  <>
+                    <div style={{ flex: 1 }} />
+                    <span style={{ fontSize: 11, color: "oklch(46% 0.022 65)", minWidth: 36, textAlign: "right" }}>{speed}×/s</span>
+                    <input type="range" min={1} max={50} value={speed} onChange={(e) => setSpeed(Number(e.target.value))}
+                      style={{ width: 88, accentColor: "oklch(75% 0.18 75)" }} />
+                  </>
+                )}
+              </div>
+
+              {/* Speed row — separate line on mobile */}
+              {isMobile && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: "oklch(46% 0.022 65)", whiteSpace: "nowrap" }}>Speed</span>
+                  <input type="range" min={1} max={50} value={speed} onChange={(e) => setSpeed(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: "oklch(75% 0.18 75)" }} />
+                  <span style={{ fontSize: 11, color: "oklch(46% 0.022 65)", minWidth: 34, textAlign: "right" }}>{speed}×/s</span>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* ════ RIGHT: Game Panel ════ */}
-          <div style={{
-            display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "16px 14px", gap: 12, overflowY: "auto",
-            background: "oklch(14% 0.012 65)",
-          }}>
+          {/* ════ RIGHT / GAME panel ════ */}
+          <div
+            className="panel-slide"
+            style={{
+              // Mobile: fill the whole area, slide off-screen when code tab is active
+              ...(isMobile ? {
+                position: "absolute", inset: 0,
+                transform: activeTab === "game" ? "translateX(0)" : "translateX(100%)",
+                transition: "transform 220ms cubic-bezier(0.25, 1, 0.5, 1)",
+              } : {}),
+              display: "flex", flexDirection: "column", alignItems: "center",
+              padding: isMobile ? "12px 16px" : "16px 14px",
+              gap: 12, overflowY: "auto",
+              background: "oklch(14% 0.012 65)",
+            }}
+          >
 
             {/* Stats */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 7, width: "100%" }}>
@@ -300,8 +408,8 @@ export default function App() {
               )}
             </div>
 
-            {/* Animated board */}
-            <div style={{ position: "relative", width: "100%" }}>
+            {/* Animated board — capped width on mobile so it doesn't span edge-to-edge */}
+            <div style={{ position: "relative", width: "100%", maxWidth: isMobile ? 420 : "none" }}>
               <div ref={boardWrapRef} style={{
                 position: "relative", width: "100%", aspectRatio: "1 / 1",
                 background: "oklch(20% 0.015 65)",
@@ -367,7 +475,7 @@ export default function App() {
                     <span style={{ fontSize: 12, color: "oklch(48% 0.022 65)" }}>
                       {score.toLocaleString()} pts · {moveCount} moves
                     </span>
-                    <button onClick={run} style={{
+                    <button onClick={handleRun} style={{
                       background: "oklch(75% 0.18 75)", color: "oklch(14% 0.012 65)",
                       padding: "7px 18px", borderRadius: 5, fontSize: 13, fontWeight: 600, marginTop: 4,
                     }}>▶ Run Again</button>
@@ -376,9 +484,27 @@ export default function App() {
               </div>
             </div>
 
+            {/* Mobile-only quick controls — so users don't have to switch tabs to run */}
+            {isMobile && (
+              <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 420 }}>
+                <button className="ctrl-btn" onClick={handleRun} disabled={isRunning}
+                  style={{ flex: 1, background: isRunning ? "oklch(48% 0.11 75)" : "oklch(75% 0.18 75)", color: "oklch(14% 0.012 65)", padding: "10px 8px", borderRadius: 5, fontSize: 13, fontWeight: 600, opacity: isRunning ? 0.55 : 1 }}>
+                  ▶ Run
+                </button>
+                <button className="ctrl-btn" onClick={stop} disabled={!isRunning}
+                  style={{ flex: 1, background: "oklch(21% 0.015 65)", color: !isRunning ? "oklch(38% 0.020 65)" : "oklch(68% 0.12 25)", border: "1px solid oklch(27% 0.017 65)", padding: "10px 8px", borderRadius: 5, fontSize: 13, fontWeight: 500 }}>
+                  ■ Stop
+                </button>
+                <button className="ctrl-btn" onClick={step} disabled={isRunning || gameOver}
+                  style={{ flex: 1, background: "oklch(21% 0.015 65)", color: (isRunning || gameOver) ? "oklch(38% 0.020 65)" : "oklch(78% 0.04 75)", border: "1px solid oklch(27% 0.017 65)", padding: "10px 8px", borderRadius: 5, fontSize: 13, fontWeight: 500 }}>
+                  ↠ Step
+                </button>
+              </div>
+            )}
+
             {/* Reset */}
             <button className="reset-btn" onClick={reset} style={{
-              width: "100%",
+              width: "100%", maxWidth: isMobile ? 420 : "none",
               background: "oklch(18% 0.014 65)", color: "oklch(52% 0.030 65)",
               border: "1px solid oklch(24% 0.016 65)",
               borderRadius: 6, padding: "8px", fontSize: 12, fontWeight: 500,
@@ -394,7 +520,7 @@ export default function App() {
 
             {/* Strategy API quick-reference */}
             <div style={{
-              marginTop: "auto", width: "100%",
+              marginTop: "auto", width: "100%", maxWidth: isMobile ? 420 : "none",
               padding: "11px 12px",
               background: "oklch(17% 0.013 65)", border: "1px solid oklch(22% 0.016 65)", borderRadius: 8,
             }}>
