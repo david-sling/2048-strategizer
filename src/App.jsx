@@ -9,6 +9,7 @@
  */
 
 import { useState, useRef, useLayoutEffect } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { PRESETS, getTileColors, tileFontSize, BOARD_PAD, TILE_GAP } from "./constants.js";
 import { useStoredStrategies } from "./useStorage.js";
 import { useEditor } from "./useEditor.js";
@@ -406,6 +407,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      <Analytics />
     </>
   );
 }
