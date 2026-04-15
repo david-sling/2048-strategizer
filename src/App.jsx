@@ -188,9 +188,25 @@ export default function App() {
           <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.025em" }}>
             2048 <span style={{ color: "oklch(75% 0.18 75)" }}>Strategizer</span>
           </span>
-          <span className="header-tagline" style={{ marginLeft: "auto", fontSize: 11, color: "oklch(38% 0.020 65)", letterSpacing: "0.08em" }}>
-            WRITE · RUN · CONQUER
-          </span>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+            <span className="header-tagline" style={{ fontSize: 11, color: "oklch(38% 0.020 65)", letterSpacing: "0.08em" }}>
+              WRITE · RUN · CONQUER
+            </span>
+            <span style={{ fontSize: 11, color: "oklch(38% 0.020 65)" }}>
+              by{" "}
+              <a href="https://davidsling.in" target="_blank" rel="noopener noreferrer"
+                style={{ color: "oklch(65% 0.14 75)", textDecoration: "none" }}
+                onMouseEnter={e => e.target.style.color = "oklch(75% 0.18 75)"}
+                onMouseLeave={e => e.target.style.color = "oklch(65% 0.14 75)"}
+              >David Sling</a>
+              {" · "}
+              <a href="https://github.com/davidsling/2048-strategizer" target="_blank" rel="noopener noreferrer"
+                style={{ color: "oklch(65% 0.14 75)", textDecoration: "none" }}
+                onMouseEnter={e => e.target.style.color = "oklch(75% 0.18 75)"}
+                onMouseLeave={e => e.target.style.color = "oklch(65% 0.14 75)"}
+              >GitHub</a>
+            </span>
+          </div>
         </header>
 
         {/* ── Error banner */}
