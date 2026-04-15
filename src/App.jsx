@@ -352,26 +352,28 @@ export default function App() {
                     </div>
                   );
                 })}
-              </div>
 
-              {/* Game-over overlay */}
-              {gameOver && (
-                <div style={{
-                  position: "absolute", inset: 0,
-                  background: "oklch(10% 0.010 65 / 0.88)",
-                  backdropFilter: "blur(6px)", borderRadius: 10,
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
-                }}>
-                  <span style={{ fontSize: 20, fontWeight: 700 }}>Game Over</span>
-                  <span style={{ fontSize: 12, color: "oklch(48% 0.022 65)" }}>
-                    {score.toLocaleString()} pts · {moveCount} moves
-                  </span>
-                  <button onClick={run} style={{
-                    background: "oklch(75% 0.18 75)", color: "oklch(14% 0.012 65)",
-                    padding: "7px 18px", borderRadius: 5, fontSize: 13, fontWeight: 600, marginTop: 4,
-                  }}>▶ Run Again</button>
-                </div>
-              )}
+                {/* Game-over overlay — lives inside the board wrapper so overflow:hidden
+                    clips it correctly, and zIndex:100 ensures it paints above all tiles
+                    regardless of their willChange / zIndex values. */}
+                {gameOver && (
+                  <div style={{
+                    position: "absolute", inset: 0, zIndex: 100,
+                    background: "oklch(10% 0.010 65 / 0.88)",
+                    backdropFilter: "blur(6px)",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
+                  }}>
+                    <span style={{ fontSize: 20, fontWeight: 700 }}>Game Over</span>
+                    <span style={{ fontSize: 12, color: "oklch(48% 0.022 65)" }}>
+                      {score.toLocaleString()} pts · {moveCount} moves
+                    </span>
+                    <button onClick={run} style={{
+                      background: "oklch(75% 0.18 75)", color: "oklch(14% 0.012 65)",
+                      padding: "7px 18px", borderRadius: 5, fontSize: 13, fontWeight: 600, marginTop: 4,
+                    }}>▶ Run Again</button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Reset */}
