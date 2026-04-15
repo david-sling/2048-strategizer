@@ -47,7 +47,7 @@ export default function App() {
     () => typeof window !== "undefined" && window.innerWidth < 768
   );
   // "game" | "code"
-  const [activeTab, setActiveTab] = useState("game");
+  const [activeTab, setActiveTab] = useState("code");
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
