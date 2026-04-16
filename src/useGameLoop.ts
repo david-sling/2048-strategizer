@@ -2,8 +2,13 @@
  * useGameLoop.ts — Game state and the run / step / stop / reset loop.
  *
  * Owns all mutable game state.  Exposes a clean interface to App.tsx:
- *   { tiles, score, moveCount, gameOver, isRunning, speed, error,
+ *   { tiles, score, moveCount, gameOver, isRunning, speed, error, seed,
  *     setSpeed, run, step, stop, reset }
+ *
+ * Seeded RNG (mulberry32) replaces Math.random() so every game is fully
+ * reproducible given the same seed + strategy + grid size.
+ * run(newSeed?) / reset(newSeed?) apply a specific seed; omitting it
+ * generates a fresh random seed automatically.
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -16,6 +21,7 @@ import {
   type Tile,
   type Direction,
 } from "./engine.ts";
+import { mulberry32, randomSeed } from "./prng.ts";
 
 export interface StrategyContext {
   getValue: (x: number, y: number) => number;
@@ -36,11 +42,15 @@ export interface GameLoopResult {
   isRunning: boolean;
   speed: number;
   error: string | null;
+  /** The seed used for the current game. Changes on every reset. */
+  seed: number;
   setSpeed: React.Dispatch<React.SetStateAction<number>>;
-  run: () => void;
+  /** Start auto-play. If game is over, resets first using newSeed (or random). */
+  run: (newSeed?: number) => void;
   step: () => void;
   stop: () => void;
-  reset: () => void;
+  /** Reset the board. Uses newSeed if provided, otherwise picks a fresh random seed. */
+  reset: (newSeed?: number) => void;
   getId: () => number;
 }
 
@@ -88,12 +98,19 @@ export function useGameLoop(
   const tileIdRef = useRef(0);
   const getId = useCallback(() => tileIdRef.current++, []);
 
+  // ── Seeded RNG ────────────────────────────────────────────────
+  // seed is exposed as React state so the UI can display it.
+  // rngRef holds the live PRNG instance; it is recreated on every reset.
+  const initialSeed = useRef<number>(randomSeed());
+  const [seed, setSeed] = useState<number>(() => initialSeed.current);
+  const rngRef = useRef<() => number>(mulberry32(initialSeed.current));
+
   // ── Authoritative game state lives in refs for the tight loop
   const tilesRef     = useRef<Tile[] | null>(null);
   const scoreRef     = useRef(0);
   const moveCountRef = useRef(0);
 
-  if (!tilesRef.current) tilesRef.current = freshTiles(size, getId);
+  if (!tilesRef.current) tilesRef.current = freshTiles(size, getId, rngRef.current);
 
   // ── React state for rendering
   const [tiles,     setTiles]     = useState<Tile[]>(() => tilesRef.current!);
@@ -109,7 +126,10 @@ export function useGameLoop(
   // ── Reset whenever grid size changes ────────────────────────
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    const fresh = freshTiles(size, getId);
+    const s = randomSeed();
+    setSeed(s);
+    rngRef.current = mulberry32(s);
+    const fresh = freshTiles(size, getId, rngRef.current);
     tilesRef.current     = fresh;
     scoreRef.current     = 0;
     moveCountRef.current = 0;
@@ -160,10 +180,10 @@ export function useGameLoop(
     const { tiles: moved, score: gained, changed } = applyMoveTracked(currentTiles, chosen, size, getId);
     if (!changed) return;
 
-    const spawned = spawnTile(moved, size, getId);
+    const spawned = spawnTile(moved, size, getId, rngRef.current);
 
-    tilesRef.current    = spawned;
-    scoreRef.current    = currentScore + gained;
+    tilesRef.current     = spawned;
+    scoreRef.current     = currentScore + gained;
     moveCountRef.current += 1;
 
     setTiles(spawned);
@@ -192,11 +212,15 @@ export function useGameLoop(
   }, [isRunning, speed, step]);
 
   // ── Exposed controls ─────────────────────────────────────────
-  const reset = useCallback((andRun = false) => {
+  const reset = useCallback((andRun = false, newSeed?: number) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    const fresh = freshTiles(size, getId);
-    tilesRef.current  = fresh;
-    scoreRef.current  = 0;
+    // Use the provided seed or generate a fresh random one.
+    const s = newSeed !== undefined ? newSeed : randomSeed();
+    setSeed(s);
+    rngRef.current = mulberry32(s);
+    const fresh = freshTiles(size, getId, rngRef.current);
+    tilesRef.current     = fresh;
+    scoreRef.current     = 0;
     moveCountRef.current = 0;
     setTiles(fresh);
     setScore(0);
@@ -206,8 +230,8 @@ export function useGameLoop(
     setIsRunning(andRun);
   }, [getId, size]);
 
-  const run  = useCallback(() => {
-    if (gameOver) reset(true);
+  const run = useCallback((newSeed?: number) => {
+    if (gameOver) reset(true, newSeed);
     else { setError(null); setIsRunning(true); }
   }, [gameOver, reset]);
 
@@ -223,8 +247,12 @@ export function useGameLoop(
   return {
     tiles, score, moveCount, gameOver,
     isRunning, speed, error,
+    seed,
     setSpeed,
-    run, step: stepOnce, stop, reset: () => reset(false),
+    run:   (newSeed?: number) => run(newSeed),
+    step:  stepOnce,
+    stop,
+    reset: (newSeed?: number) => reset(false, newSeed),
     getId,
   };
 }

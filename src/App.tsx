@@ -20,6 +20,7 @@ import {
 import { useStoredStrategies } from "./useStorage.ts";
 import { useEditor } from "./useEditor.ts";
 import { useGameLoop } from "./useGameLoop.ts";
+import { seedToHex, hexToSeed, randomSeed } from "./prng.ts";
 
 export default function App() {
   // ── Strategy code  (shared between editor hook and game-loop hook via ref)
@@ -47,12 +48,22 @@ export default function App() {
     isRunning,
     speed,
     error,
+    seed,
     setSpeed,
     run,
     step,
     stop,
     reset,
   } = useGameLoop(strategyCodeRef, gridSize);
+
+  // ── Seed input (editable hex string; applied on Reset / Run-after-gameover)
+  const [seedInput, setSeedInput] = useState(() => seedToHex(seed));
+  // Keep the display in sync whenever the hook assigns a new seed (grid change, etc.)
+  useEffect(() => { setSeedInput(seedToHex(seed)); }, [seed]);
+  const seedInputValid = seedInput === "" || hexToSeed(seedInput) !== null;
+  const handleRandomizeSeed = () => setSeedInput(seedToHex(randomSeed()));
+  // Parse current input → pass to hook, or undefined to let it pick a random seed.
+  const parseSeedInput = () => hexToSeed(seedInput) ?? undefined;
 
   const { savedStrategies, saveStrategy, deleteStrategy } =
     useStoredStrategies();
@@ -122,8 +133,9 @@ export default function App() {
   // ── On mobile, switch to the game tab whenever Run is triggered
   const handleRun = () => {
     if (isMobile) setActiveTab("game");
-    run();
+    run(parseSeedInput());
   };
+  const handleReset = () => reset(parseSeedInput());
 
   // ── Shared button styles to reduce repetition
   const ctrlBtnBase: CSSProperties = {
@@ -1090,10 +1102,73 @@ export default function App() {
               </div>
             )}
 
+            {/* Seed control */}
+            <div
+              style={{
+                width: "100%",
+                maxWidth: isMobile ? 420 : "none",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 9,
+                  letterSpacing: "0.10em",
+                  color: "oklch(40% 0.020 65)",
+                  whiteSpace: "nowrap",
+                  minWidth: 30,
+                }}
+              >
+                SEED
+              </span>
+              <input
+                type="text"
+                value={seedInput}
+                onChange={(e) => setSeedInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleReset(); }}
+                placeholder="0x00000000"
+                spellCheck={false}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  background: "oklch(18% 0.014 65)",
+                  color: seedInputValid
+                    ? "oklch(75% 0.18 75)"
+                    : "oklch(65% 0.17 22)",
+                  border: `1px solid ${seedInputValid ? "oklch(26% 0.017 65)" : "oklch(32% 0.10 22)"}`,
+                  borderRadius: 5,
+                  padding: "5px 9px",
+                  fontSize: 11,
+                  fontFamily: "'JetBrains Mono','Fira Code',monospace",
+                  letterSpacing: "0.06em",
+                  outline: "none",
+                }}
+              />
+              <button
+                onClick={handleRandomizeSeed}
+                title="Generate random seed"
+                style={{
+                  flexShrink: 0,
+                  background: "oklch(21% 0.015 65)",
+                  color: "oklch(52% 0.030 65)",
+                  border: "1px solid oklch(27% 0.017 65)",
+                  borderRadius: 5,
+                  padding: "5px 9px",
+                  fontSize: 13,
+                  lineHeight: 1,
+                  transition: "all 0.12s",
+                }}
+              >
+                ⟳
+              </button>
+            </div>
+
             {/* Reset */}
             <button
               className="reset-btn"
-              onClick={reset}
+              onClick={handleReset}
               style={{
                 width: "100%",
                 maxWidth: isMobile ? 420 : "none",

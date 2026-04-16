@@ -25,22 +25,22 @@ export interface Tile {
 // Board helpers
 // ─────────────────────────────────────────────
 
-function spawnOnBoard(board: number[][], size: number): number[][] {
+function spawnOnBoard(board: number[][], size: number, rng: () => number): number[][] {
   const empties: [number, number][] = [];
   for (let r = 0; r < size; r++)
     for (let c = 0; c < size; c++)
       if (board[r][c] === 0) empties.push([r, c]);
   if (!empties.length) return board;
-  const [r, c] = empties[Math.floor(Math.random() * empties.length)];
+  const [r, c] = empties[Math.floor(rng() * empties.length)];
   const next = board.map((row) => [...row]);
-  next[r][c] = Math.random() < 0.9 ? 2 : 4;
+  next[r][c] = rng() < 0.9 ? 2 : 4;
   return next;
 }
 
-export function initBoard(size: number): number[][] {
+export function initBoard(size: number, rng: () => number): number[][] {
   let b: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
-  b = spawnOnBoard(b, size);
-  b = spawnOnBoard(b, size);
+  b = spawnOnBoard(b, size, rng);
+  b = spawnOnBoard(b, size, rng);
   return b;
 }
 
@@ -146,19 +146,19 @@ export function boardToTiles(board: number[][], size: number, getId: () => numbe
 // ─────────────────────────────────────────────
 
 /** Spawn a new tile in a random empty cell; returns a new tiles array. */
-export function spawnTile(tiles: Tile[], size: number, getId: () => number): Tile[] {
+export function spawnTile(tiles: Tile[], size: number, getId: () => number, rng: () => number): Tile[] {
   const occ = new Set(tiles.map((t) => `${t.row},${t.col}`));
   const empties: [number, number][] = [];
   for (let r = 0; r < size; r++)
     for (let c = 0; c < size; c++)
       if (!occ.has(`${r},${c}`)) empties.push([r, c]);
   if (!empties.length) return tiles;
-  const [r, c] = empties[Math.floor(Math.random() * empties.length)];
+  const [r, c] = empties[Math.floor(rng() * empties.length)];
   return [
     ...tiles,
     {
       id: getId(),
-      value: Math.random() < 0.9 ? 2 : 4,
+      value: rng() < 0.9 ? 2 : 4,
       row: r,
       col: c,
       isNew: true,
@@ -311,6 +311,6 @@ export function applyMoveTracked(
 }
 
 /** Build a fresh tile array for a new game. */
-export function freshTiles(size: number, getId: () => number): Tile[] {
-  return boardToTiles(initBoard(size), size, getId);
+export function freshTiles(size: number, getId: () => number, rng: () => number): Tile[] {
+  return boardToTiles(initBoard(size, rng), size, getId);
 }
