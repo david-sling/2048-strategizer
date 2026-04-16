@@ -54,16 +54,16 @@ function compileStrategy(code: string): StrategyFn {
 }
 
 /** Build the context object passed to each strategy call. */
-function makeContext(board: number[][], score: number): StrategyContext {
+function makeContext(board: number[][], score: number, size: number): StrategyContext {
   return {
     getValue:       (x, y) => board[y]?.[x] ?? 0,
-    getLegalMoves:  ()     => getLegalMoves(board),
+    getLegalMoves:  ()     => getLegalMoves(board, size),
     getBoard:       ()     => board.map((r) => [...r]),
     getScore:       ()     => score,
     getEmptyCells:  ()     => {
       const cells: { x: number; y: number }[] = [];
-      for (let r = 0; r < 4; r++)
-        for (let c = 0; c < 4; c++)
+      for (let r = 0; r < size; r++)
+        for (let c = 0; c < size; c++)
           if (board[r][c] === 0) cells.push({ x: c, y: r });
       return cells;
     },
@@ -80,7 +80,10 @@ function normaliseMoves(result: string | string[]): Direction[] {
   return [...moves, ...missing] as Direction[];
 }
 
-export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopResult {
+export function useGameLoop(
+  strategyCodeRef: React.RefObject<string>,
+  size: number,
+): GameLoopResult {
   // ── Tile ID counter (never causes re-renders)
   const tileIdRef = useRef(0);
   const getId = useCallback(() => tileIdRef.current++, []);
@@ -90,7 +93,7 @@ export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopR
   const scoreRef     = useRef(0);
   const moveCountRef = useRef(0);
 
-  if (!tilesRef.current) tilesRef.current = freshTiles(getId);
+  if (!tilesRef.current) tilesRef.current = freshTiles(size, getId);
 
   // ── React state for rendering
   const [tiles,     setTiles]     = useState<Tile[]>(() => tilesRef.current!);
@@ -103,12 +106,28 @@ export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopR
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Reset whenever grid size changes ────────────────────────
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    const fresh = freshTiles(size, getId);
+    tilesRef.current     = fresh;
+    scoreRef.current     = 0;
+    moveCountRef.current = 0;
+    setTiles(fresh);
+    setScore(0);
+    setMoveCount(0);
+    setGameOver(false);
+    setError(null);
+    setIsRunning(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size]);
+
   // ── Single step ──────────────────────────────────────────────
   const step = useCallback(() => {
     const currentTiles = tilesRef.current!;
     const currentScore = scoreRef.current;
-    const board        = tilesToBoard(currentTiles);
-    const legal        = getLegalMoves(board);
+    const board        = tilesToBoard(currentTiles, size);
+    const legal        = getLegalMoves(board, size);
 
     if (!legal.length) {
       setGameOver(true);
@@ -129,7 +148,7 @@ export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopR
 
     let priorityMoves: Direction[];
     try {
-      priorityMoves = normaliseMoves(strategyFn(makeContext(board, currentScore)));
+      priorityMoves = normaliseMoves(strategyFn(makeContext(board, currentScore, size)));
     } catch (e) {
       setError(`Runtime error: ${(e as Error).message}`);
       setIsRunning(false);
@@ -138,10 +157,10 @@ export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopR
     }
 
     const chosen = priorityMoves.find((m) => legal.includes(m)) ?? legal[0];
-    const { tiles: moved, score: gained, changed } = applyMoveTracked(currentTiles, chosen, getId);
+    const { tiles: moved, score: gained, changed } = applyMoveTracked(currentTiles, chosen, size, getId);
     if (!changed) return;
 
-    const spawned = spawnTile(moved, getId);
+    const spawned = spawnTile(moved, size, getId);
 
     tilesRef.current    = spawned;
     scoreRef.current    = currentScore + gained;
@@ -152,12 +171,12 @@ export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopR
     setMoveCount((m) => m + 1);
     setError(null);
 
-    if (!getLegalMoves(tilesToBoard(spawned)).length) {
+    if (!getLegalMoves(tilesToBoard(spawned, size), size).length) {
       setGameOver(true);
       setIsRunning(false);
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
-  }, [getId, strategyCodeRef]);
+  }, [getId, size, strategyCodeRef]);
 
   // ── Auto-play interval ───────────────────────────────────────
   useEffect(() => {
@@ -175,7 +194,7 @@ export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopR
   // ── Exposed controls ─────────────────────────────────────────
   const reset = useCallback((andRun = false) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    const fresh = freshTiles(getId);
+    const fresh = freshTiles(size, getId);
     tilesRef.current  = fresh;
     scoreRef.current  = 0;
     moveCountRef.current = 0;
@@ -185,7 +204,7 @@ export function useGameLoop(strategyCodeRef: React.RefObject<string>): GameLoopR
     setGameOver(false);
     setError(null);
     setIsRunning(andRun);
-  }, [getId]);
+  }, [getId, size]);
 
   const run  = useCallback(() => {
     if (gameOver) reset(true);

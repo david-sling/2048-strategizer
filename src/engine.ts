@@ -2,11 +2,11 @@
  * engine.ts — Pure 2048 game logic. No React, no side-effects.
  *
  * Two representations are used:
- *   board  — number[][]  (4×4 grid, board[row][col])
+ *   board  — number[][]  (N×N grid, board[row][col])
  *   tiles  — Tile[]      (objects with id, value, row, col, animation flags)
  *
- * The board representation is used for legal-move detection (cheap).
- * The tile representation is used for rendering (carries identity / animation state).
+ * All functions accept an explicit `size` parameter so the grid dimensions
+ * are fully configurable (always square: size × size).
  */
 
 export type Direction = "up" | "down" | "left" | "right";
@@ -25,10 +25,10 @@ export interface Tile {
 // Board helpers
 // ─────────────────────────────────────────────
 
-function spawnOnBoard(board: number[][]): number[][] {
+function spawnOnBoard(board: number[][], size: number): number[][] {
   const empties: [number, number][] = [];
-  for (let r = 0; r < 4; r++)
-    for (let c = 0; c < 4; c++)
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
       if (board[r][c] === 0) empties.push([r, c]);
   if (!empties.length) return board;
   const [r, c] = empties[Math.floor(Math.random() * empties.length)];
@@ -37,15 +37,15 @@ function spawnOnBoard(board: number[][]): number[][] {
   return next;
 }
 
-export function initBoard(): number[][] {
-  let b: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0));
-  b = spawnOnBoard(b);
-  b = spawnOnBoard(b);
+export function initBoard(size: number): number[][] {
+  let b: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
+  b = spawnOnBoard(b, size);
+  b = spawnOnBoard(b, size);
   return b;
 }
 
 /** Slide a line toward index 0, merging equal adjacent tiles once. */
-function slideLeft(line: number[]): { line: number[]; score: number } {
+function slideLeft(line: number[], size: number): { line: number[]; score: number } {
   const tiles = line.filter(Boolean);
   const result: number[] = [];
   let score = 0;
@@ -61,7 +61,7 @@ function slideLeft(line: number[]): { line: number[]; score: number } {
       i++;
     }
   }
-  while (result.length < 4) result.push(0);
+  while (result.length < size) result.push(0);
   return { line: result, score };
 }
 
@@ -69,47 +69,48 @@ function slideLeft(line: number[]): { line: number[]; score: number } {
 export function applyMove(
   board: number[][],
   dir: Direction,
+  size: number,
 ): { board: number[][]; score: number; changed: boolean } {
   const next = board.map((r) => [...r]);
   let totalScore = 0;
   let changed = false;
 
   const slide = (orig: number[]): number[] => {
-    const { line, score } = slideLeft(orig);
+    const { line, score } = slideLeft(orig, size);
     if (!changed && orig.some((v, i) => v !== line[i])) changed = true;
     totalScore += score;
     return line;
   };
 
   if (dir === "left") {
-    for (let r = 0; r < 4; r++) next[r] = slide(next[r]);
+    for (let r = 0; r < size; r++) next[r] = slide(next[r]);
   } else if (dir === "right") {
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < size; r++) {
       const orig = [...next[r]];
       const slid = slide([...orig].reverse()).reverse();
       if (!changed && orig.some((v, i) => v !== slid[i])) changed = true;
       next[r] = slid;
     }
   } else if (dir === "up") {
-    for (let c = 0; c < 4; c++) {
-      const col = [next[0][c], next[1][c], next[2][c], next[3][c]];
+    for (let c = 0; c < size; c++) {
+      const col = Array.from({ length: size }, (_, r) => next[r][c]);
       const slid = slide(col);
-      for (let r = 0; r < 4; r++) next[r][c] = slid[r];
+      for (let r = 0; r < size; r++) next[r][c] = slid[r];
     }
   } else if (dir === "down") {
-    for (let c = 0; c < 4; c++) {
-      const col = [next[3][c], next[2][c], next[1][c], next[0][c]];
+    for (let c = 0; c < size; c++) {
+      const col = Array.from({ length: size }, (_, i) => next[size - 1 - i][c]);
       const slid = slide(col);
-      for (let i = 0; i < 4; i++) next[3 - i][c] = slid[i];
+      for (let i = 0; i < size; i++) next[size - 1 - i][c] = slid[i];
     }
   }
 
   return { board: next, score: totalScore, changed };
 }
 
-export function getLegalMoves(board: number[][]): Direction[] {
+export function getLegalMoves(board: number[][], size: number): Direction[] {
   return (["up", "down", "left", "right"] as Direction[]).filter(
-    (d) => applyMove(board, d).changed,
+    (d) => applyMove(board, d, size).changed,
   );
 }
 
@@ -117,16 +118,16 @@ export function getLegalMoves(board: number[][]): Direction[] {
 // Tile ↔ board conversions
 // ─────────────────────────────────────────────
 
-export function tilesToBoard(tiles: Tile[]): number[][] {
-  const board: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0));
+export function tilesToBoard(tiles: Tile[], size: number): number[][] {
+  const board: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
   for (const t of tiles) board[t.row][t.col] = t.value;
   return board;
 }
 
-export function boardToTiles(board: number[][], getId: () => number): Tile[] {
+export function boardToTiles(board: number[][], size: number, getId: () => number): Tile[] {
   const tiles: Tile[] = [];
-  for (let r = 0; r < 4; r++)
-    for (let c = 0; c < 4; c++)
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
       if (board[r][c] !== 0)
         tiles.push({
           id: getId(),
@@ -145,11 +146,11 @@ export function boardToTiles(board: number[][], getId: () => number): Tile[] {
 // ─────────────────────────────────────────────
 
 /** Spawn a new tile in a random empty cell; returns a new tiles array. */
-export function spawnTile(tiles: Tile[], getId: () => number): Tile[] {
+export function spawnTile(tiles: Tile[], size: number, getId: () => number): Tile[] {
   const occ = new Set(tiles.map((t) => `${t.row},${t.col}`));
   const empties: [number, number][] = [];
-  for (let r = 0; r < 4; r++)
-    for (let c = 0; c < 4; c++)
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
       if (!occ.has(`${r},${c}`)) empties.push([r, c]);
   if (!empties.length) return tiles;
   const [r, c] = empties[Math.floor(Math.random() * empties.length)];
@@ -180,11 +181,12 @@ export function spawnTile(tiles: Tile[], getId: () => number): Tile[] {
 export function applyMoveTracked(
   prevTiles: Tile[],
   dir: Direction,
+  size: number,
   getId: () => number,
 ): { tiles: Tile[]; score: number; changed: boolean } {
-  const vGrid: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0));
-  const iGrid: (number | null)[][] = Array.from({ length: 4 }, () =>
-    Array(4).fill(null),
+  const vGrid: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
+  const iGrid: (number | null)[][] = Array.from({ length: size }, () =>
+    Array(size).fill(null),
   );
   for (const t of prevTiles) {
     vGrid[t.row][t.col] = t.value;
@@ -195,12 +197,12 @@ export function applyMoveTracked(
   let totalScore = 0;
   let changed = false;
 
-  const nvGrid: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0));
-  const niGrid: (number | null)[][] = Array.from({ length: 4 }, () =>
-    Array(4).fill(null),
+  const nvGrid: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
+  const niGrid: (number | null)[][] = Array.from({ length: size }, () =>
+    Array(size).fill(null),
   );
-  const nmGrid: boolean[][] = Array.from({ length: 4 }, () =>
-    Array(4).fill(false),
+  const nmGrid: boolean[][] = Array.from({ length: size }, () =>
+    Array(size).fill(false),
   );
 
   function slideLine(
@@ -212,11 +214,11 @@ export function applyMoveTracked(
     om: boolean[];
   } {
     const pairs: { v: number; id: number | null }[] = [];
-    for (let i = 0; i < 4; i++) if (vals[i]) pairs.push({ v: vals[i], id: ids[i] });
+    for (let i = 0; i < size; i++) if (vals[i]) pairs.push({ v: vals[i], id: ids[i] });
 
-    const ov = Array(4).fill(0) as number[];
-    const oi = Array(4).fill(null) as (number | null)[];
-    const om = Array(4).fill(false) as boolean[];
+    const ov = Array(size).fill(0) as number[];
+    const oi = Array(size).fill(null) as (number | null)[];
+    const om = Array(size).fill(false) as boolean[];
     let score = 0;
     let out = 0;
     let i = 0;
@@ -243,14 +245,14 @@ export function applyMoveTracked(
   }
 
   if (dir === "left") {
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < size; r++) {
       const { ov, oi, om } = slideLine(vGrid[r], iGrid[r]);
       nvGrid[r] = ov;
       niGrid[r] = oi;
       nmGrid[r] = om;
     }
   } else if (dir === "right") {
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < size; r++) {
       const { ov, oi, om } = slideLine(
         [...vGrid[r]].reverse(),
         [...iGrid[r]].reverse(),
@@ -260,25 +262,25 @@ export function applyMoveTracked(
       nmGrid[r] = [...om].reverse();
     }
   } else if (dir === "up") {
-    for (let c = 0; c < 4; c++) {
-      const cv = [vGrid[0][c], vGrid[1][c], vGrid[2][c], vGrid[3][c]];
-      const ci = [iGrid[0][c], iGrid[1][c], iGrid[2][c], iGrid[3][c]];
+    for (let c = 0; c < size; c++) {
+      const cv = Array.from({ length: size }, (_, r) => vGrid[r][c]);
+      const ci = Array.from({ length: size }, (_, r) => iGrid[r][c]);
       const { ov, oi, om } = slideLine(cv, ci);
-      for (let r = 0; r < 4; r++) {
+      for (let r = 0; r < size; r++) {
         nvGrid[r][c] = ov[r];
         niGrid[r][c] = oi[r];
         nmGrid[r][c] = om[r];
       }
     }
   } else {
-    for (let c = 0; c < 4; c++) {
-      const cv = [vGrid[3][c], vGrid[2][c], vGrid[1][c], vGrid[0][c]];
-      const ci = [iGrid[3][c], iGrid[2][c], iGrid[1][c], iGrid[0][c]];
+    for (let c = 0; c < size; c++) {
+      const cv = Array.from({ length: size }, (_, i) => vGrid[size - 1 - i][c]);
+      const ci = Array.from({ length: size }, (_, i) => iGrid[size - 1 - i][c]);
       const { ov, oi, om } = slideLine(cv, ci);
-      for (let i = 0; i < 4; i++) {
-        nvGrid[3 - i][c] = ov[i];
-        niGrid[3 - i][c] = oi[i];
-        nmGrid[3 - i][c] = om[i];
+      for (let i = 0; i < size; i++) {
+        nvGrid[size - 1 - i][c] = ov[i];
+        niGrid[size - 1 - i][c] = oi[i];
+        nmGrid[size - 1 - i][c] = om[i];
       }
     }
   }
@@ -287,8 +289,8 @@ export function applyMoveTracked(
   void getId;
 
   const newTiles: Tile[] = [];
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
       if (!nvGrid[r][c]) continue;
       const id = niGrid[r][c]!;
       const isMerged = nmGrid[r][c];
@@ -309,6 +311,6 @@ export function applyMoveTracked(
 }
 
 /** Build a fresh tile array for a new game. */
-export function freshTiles(getId: () => number): Tile[] {
-  return boardToTiles(initBoard(), getId);
+export function freshTiles(size: number, getId: () => number): Tile[] {
+  return boardToTiles(initBoard(size), size, getId);
 }

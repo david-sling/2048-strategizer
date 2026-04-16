@@ -36,6 +36,9 @@ export default function App() {
   const { containerRef: editorContainerRef, setCode: setEditorCode } =
     useEditor(strategyCode, handleCodeChange);
 
+  // ── Grid size
+  const [gridSize, setGridSize] = useState(4);
+
   const {
     tiles,
     score,
@@ -49,7 +52,7 @@ export default function App() {
     step,
     stop,
     reset,
-  } = useGameLoop(strategyCodeRef);
+  } = useGameLoop(strategyCodeRef, gridSize);
 
   const { savedStrategies, saveStrategy, deleteStrategy } =
     useStoredStrategies();
@@ -101,13 +104,15 @@ export default function App() {
     if (!boardWrapRef.current) return;
     const el = boardWrapRef.current;
     const update = () => {
-      setCellSize((el.offsetWidth - 2 * BOARD_PAD - 3 * TILE_GAP) / 4);
+      setCellSize(
+        (el.offsetWidth - 2 * BOARD_PAD - (gridSize - 1) * TILE_GAP) / gridSize,
+      );
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [gridSize]);
 
   const tileX = (col: number) => BOARD_PAD + col * (cellSize + TILE_GAP);
   const tileY = (row: number) => BOARD_PAD + row * (cellSize + TILE_GAP);
@@ -254,10 +259,12 @@ export default function App() {
                 rel="noopener noreferrer"
                 style={{ color: "oklch(65% 0.14 75)", textDecoration: "none" }}
                 onMouseEnter={(e) =>
-                  ((e.target as HTMLAnchorElement).style.color = "oklch(75% 0.18 75)")
+                  ((e.target as HTMLAnchorElement).style.color =
+                    "oklch(75% 0.18 75)")
                 }
                 onMouseLeave={(e) =>
-                  ((e.target as HTMLAnchorElement).style.color = "oklch(65% 0.14 75)")
+                  ((e.target as HTMLAnchorElement).style.color =
+                    "oklch(65% 0.14 75)")
                 }
               >
                 David Sling
@@ -269,10 +276,12 @@ export default function App() {
                 rel="noopener noreferrer"
                 style={{ color: "oklch(65% 0.14 75)", textDecoration: "none" }}
                 onMouseEnter={(e) =>
-                  ((e.target as HTMLAnchorElement).style.color = "oklch(75% 0.18 75)")
+                  ((e.target as HTMLAnchorElement).style.color =
+                    "oklch(75% 0.18 75)")
                 }
                 onMouseLeave={(e) =>
-                  ((e.target as HTMLAnchorElement).style.color = "oklch(65% 0.14 75)")
+                  ((e.target as HTMLAnchorElement).style.color =
+                    "oklch(65% 0.14 75)")
                 }
               >
                 GitHub
@@ -825,6 +834,57 @@ export default function App() {
               ))}
             </div>
 
+            {/* Grid size selector */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                width: "100%",
+                maxWidth: isMobile ? 420 : "none",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "oklch(40% 0.020 65)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                GRID
+              </span>
+              <div style={{ display: "flex", gap: 4 }}>
+                {[3, 4, 5, 6, 8].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setGridSize(n)}
+                    style={{
+                      borderRadius: 4,
+                      padding: "3px 9px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: "1px solid",
+                      borderColor:
+                        gridSize === n
+                          ? "oklch(75% 0.18 75)"
+                          : "oklch(26% 0.017 65)",
+                      background:
+                        gridSize === n
+                          ? "oklch(75% 0.18 75)"
+                          : "oklch(20% 0.014 65)",
+                      color:
+                        gridSize === n
+                          ? "oklch(14% 0.012 65)"
+                          : "oklch(52% 0.030 65)",
+                      transition: "all 0.12s",
+                    }}
+                  >
+                    {n}×{n}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Animated board — capped width on mobile so it doesn't span edge-to-edge */}
             <div
               style={{
@@ -846,9 +906,9 @@ export default function App() {
                 }}
               >
                 {/* Empty cell backdrop */}
-                {Array.from({ length: 16 }, (_, i) => {
-                  const r = Math.floor(i / 4),
-                    c = i % 4;
+                {Array.from({ length: gridSize * gridSize }, (_, i) => {
+                  const r = Math.floor(i / gridSize),
+                    c = i % gridSize;
                   return (
                     <div
                       key={i}
