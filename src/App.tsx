@@ -91,6 +91,9 @@ export default function App() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
 
+  // ── Strategy API reference panel
+  const [apiOpen, setApiOpen] = useState(false);
+
   // ── Responsive: mobile detection via matchMedia
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== "undefined" && window.innerWidth < 768,
@@ -194,6 +197,99 @@ export default function App() {
     setLbOpen(false);
     if (isMobile) setActiveTab("code");
   };
+
+  // ── Strategy API reference — shared between code panel (mobile) and game panel (desktop)
+  const apiRef = (
+    <div
+      style={{
+        width: "100%",
+        background: "oklch(17% 0.013 65)",
+        border: "1px solid oklch(22% 0.016 65)",
+        borderRadius: 8,
+        overflow: "hidden",
+      }}
+    >
+      <button
+        onClick={() => setApiOpen((o) => !o)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "10px 12px",
+          background: "none",
+          fontFamily: "inherit",
+          cursor: "pointer",
+          borderBottom: apiOpen ? "1px solid oklch(22% 0.016 65)" : "none",
+        }}
+      >
+        <span style={{ fontSize: 9, letterSpacing: "0.10em", color: "oklch(38% 0.019 65)" }}>
+          STRATEGY API
+        </span>
+        <span style={{ marginLeft: "auto", fontSize: 10, color: "oklch(34% 0.018 65)", transition: "transform 0.15s", display: "inline-block", transform: apiOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+          ▾
+        </span>
+      </button>
+      {apiOpen && (
+        <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 9, letterSpacing: "0.08em", color: "oklch(34% 0.018 65)", marginBottom: 6 }}>
+              AVAILABLE IN YOUR FUNCTION
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {([
+                ["getValue(x, y)",   "→ number",     "tile at col x, row y (0 = empty)"],
+                ["getLegalMoves()",  "→ string[]",   "e.g. [\"up\", \"left\"]"],
+                ["getBoard()",       "→ number[][]", "board[row][col]"],
+                ["getScore()",       "→ number",     "current score"],
+                ["getEmptyCells()",  "→ {x,y}[]",    "all empty positions"],
+                ["getHighestTile()", "→ number",     "current max tile value"],
+              ] as [string, string, string][]).map(([fn, ret, desc]) => (
+                <div key={fn} style={{ display: "grid", gridTemplateColumns: "1fr auto", columnGap: 8, rowGap: 1 }}>
+                  <code style={{ fontSize: 10, color: "oklch(68% 0.10 75)", fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>
+                    {fn}
+                  </code>
+                  <code style={{ fontSize: 10, color: "oklch(44% 0.024 65)", fontFamily: "'JetBrains Mono','Fira Code',monospace", textAlign: "right" }}>
+                    {ret}
+                  </code>
+                  <span style={{ fontSize: 10, color: "oklch(40% 0.020 65)", gridColumn: "1 / -1", paddingLeft: 2 }}>
+                    {desc}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ height: 1, background: "oklch(22% 0.016 65)" }} />
+          <div>
+            <div style={{ fontSize: 9, letterSpacing: "0.08em", color: "oklch(34% 0.018 65)", marginBottom: 6 }}>
+              RETURN VALUE
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <div style={{ fontSize: 10, color: "oklch(48% 0.024 65)", lineHeight: 1.5 }}>
+                Return a <code style={{ color: "oklch(68% 0.10 75)", fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>string[]</code> of moves in priority order. The engine tries each in turn until it finds a legal one.
+              </div>
+              <code style={{ fontSize: 10, color: "oklch(62% 0.10 75)", fontFamily: "'JetBrains Mono','Fira Code',monospace", background: "oklch(14% 0.011 65)", padding: "6px 8px", borderRadius: 5, display: "block", lineHeight: 1.7 }}>
+                {"return [\"up\", \"right\", \"down\", \"left\"]"}
+              </code>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                {([
+                  ["Valid moves",     "\"up\"  \"down\"  \"left\"  \"right\""],
+                  ["Partial list ok", "missing moves are appended in default order"],
+                  ["Single string ok","\"up\"  →  treated as  [\"up\"]"],
+                  ["Fallback",        "if none are legal, any legal move is used"],
+                ] as [string, string][]).map(([label, note]) => (
+                  <div key={label} style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
+                    <span style={{ fontSize: 9, color: "oklch(34% 0.018 65)", whiteSpace: "nowrap", minWidth: 70 }}>{label}</span>
+                    <span style={{ fontSize: 10, color: "oklch(42% 0.020 65)", lineHeight: 1.4 }}>{note}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   // ── Shared button styles to reduce repetition
   const ctrlBtnBase: CSSProperties = {
@@ -848,6 +944,9 @@ export default function App() {
                   </span>
                 </div>
               )}
+
+              {/* API reference — shown in code panel on mobile only */}
+              {isMobile && apiRef}
             </div>
           </div>
 
@@ -1388,40 +1487,12 @@ export default function App() {
               </div>
             )}
 
-            {/* Strategy API quick-reference */}
-            <div
-              style={{
-                marginTop: "auto",
-                width: "100%",
-                maxWidth: isMobile ? 420 : "none",
-                padding: "11px 12px",
-                background: "oklch(17% 0.013 65)",
-                border: "1px solid oklch(22% 0.016 65)",
-                borderRadius: 8,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 9,
-                  letterSpacing: "0.10em",
-                  color: "oklch(38% 0.019 65)",
-                  marginBottom: 7,
-                }}
-              >
-                STRATEGY API
+            {/* API reference — shown in game panel on desktop only */}
+            {!isMobile && (
+              <div style={{ marginTop: "auto", width: "100%" }}>
+                {apiRef}
               </div>
-              <code
-                style={{
-                  display: "block",
-                  lineHeight: 1.9,
-                  fontSize: 10,
-                  color: "oklch(52% 0.035 65)",
-                  fontFamily: "'JetBrains Mono','Fira Code',monospace",
-                }}
-              >
-                {`getValue(x, y)\ngetLegalMoves()\ngetBoard()\ngetScore()\ngetEmptyCells()\ngetHighestTile()`}
-              </code>
-            </div>
+            )}
           </div>
         </div>
       </div>
