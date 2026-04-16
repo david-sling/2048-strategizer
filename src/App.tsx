@@ -23,9 +23,9 @@ import { useGameLoop } from "./useGameLoop.ts";
 
 export default function App() {
   // ── Strategy code  (shared between editor hook and game-loop hook via ref)
-  const [strategyCode, setStrategyCode] = useState(PRESETS.fixedOrder.code);
-  const [selectedPreset, setSelectedPreset] = useState("fixedOrder");
-  const strategyCodeRef = useRef(PRESETS.fixedOrder.code);
+  const [strategyCode, setStrategyCode] = useState(PRESETS.cornerSeeker.code);
+  const [selectedPreset, setSelectedPreset] = useState("cornerSeeker");
+  const strategyCodeRef = useRef(PRESETS.cornerSeeker.code);
 
   const handleCodeChange = (code: string) => {
     setStrategyCode(code);
