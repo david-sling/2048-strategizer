@@ -21,6 +21,7 @@ import { useStoredStrategies } from "./useStorage.ts";
 import { useEditor } from "./useEditor.ts";
 import { useGameLoop } from "./useGameLoop.ts";
 import { seedToHex, hexToSeed, randomSeed } from "./prng.ts";
+import { useLeaderboard, type LeaderboardEntry } from "./useLeaderboard.ts";
 
 export default function App() {
   // ── Strategy code  (shared between editor hook and game-loop hook via ref)
@@ -68,6 +69,24 @@ export default function App() {
   const { savedStrategies, saveStrategy, deleteStrategy } =
     useStoredStrategies();
 
+  // ── Leaderboard hook + UI state (declared before any effects that reference them)
+  const {
+    entries: lbEntries,
+    isLoading: lbLoading,
+    isSubmitting,
+    submitError,
+    fetchEntries,
+    submitEntry,
+  } = useLeaderboard();
+  const [lbOpen,            setLbOpen]            = useState(false);
+  const [lbGridFilter,      setLbGridFilter]      = useState(4);
+  const [submitOpen,        setSubmitOpen]        = useState(false);
+  const [playerName,        setPlayerName]        = useState(
+    () => localStorage.getItem("2048-player-name") ?? "",
+  );
+  const [strategyNameInput, setStrategyNameInput] = useState("");
+  const [submitted,         setSubmitted]         = useState(false);
+
   // ── Save-dialog UI state
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -85,6 +104,21 @@ export default function App() {
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, []);
+
+  // Fetch leaderboard whenever the modal opens or the grid filter changes
+  useEffect(() => {
+    if (lbOpen) fetchEntries(lbGridFilter);
+  }, [lbOpen, lbGridFilter, fetchEntries]);
+
+  // Reset submit state each time a new game ends
+  useEffect(() => {
+    if (gameOver) {
+      setSubmitted(false);
+      setSubmitOpen(false);
+      const label = selectedPreset ? (PRESETS[selectedPreset]?.label ?? "Custom") : "Custom";
+      setStrategyNameInput(label);
+    }
+  }, [gameOver, selectedPreset]);
 
   const handleSave = () => {
     const name = saveName.trim();
@@ -136,6 +170,30 @@ export default function App() {
     run(parseSeedInput());
   };
   const handleReset = () => reset(parseSeedInput());
+
+  const handleSubmitScore = async () => {
+    localStorage.setItem("2048-player-name", playerName.trim());
+    const ok = await submitEntry({
+      playerName:   playerName.trim() || "Anonymous",
+      strategyName: strategyNameInput.trim() || "Unnamed",
+      strategyCode,
+      seed,
+      gridSize,
+      score,
+      maxTile,
+      moveCount,
+    });
+    if (ok) setSubmitted(true);
+  };
+
+  const handleLoadEntry = (entry: LeaderboardEntry) => {
+    setEditorCode(entry.strategyCode);
+    handleCodeChange(entry.strategyCode);
+    setSeedInput(entry.seedHex);
+    setSelectedPreset("");
+    setLbOpen(false);
+    if (isMobile) setActiveTab("code");
+  };
 
   // ── Shared button styles to reduce repetition
   const ctrlBtnBase: CSSProperties = {
@@ -194,6 +252,9 @@ export default function App() {
         .ctrl-btn:hover:not(:disabled) { filter: brightness(1.12); }
         .reset-btn:hover { background: oklch(23% 0.016 65) !important; color: oklch(80% 0.04 75) !important; }
         .tab-btn:active  { background: oklch(20% 0.015 65) !important; }
+        .lb-btn:hover    { background: oklch(24% 0.016 65) !important; color: oklch(75% 0.18 75) !important; }
+        .lb-row:hover td { background: oklch(20% 0.014 65 / 0.6); }
+        .lb-load:hover   { background: oklch(26% 0.017 65) !important; color: oklch(75% 0.18 75) !important; }
 
         /* ── Mobile: larger touch targets & layout tweaks */
         @media (max-width: 767px) {
@@ -263,6 +324,24 @@ export default function App() {
             >
               WRITE · RUN · CONQUER
             </span>
+            <button
+              className="lb-btn"
+              onClick={() => setLbOpen(true)}
+              style={{
+                background: "oklch(20% 0.014 65)",
+                color: "oklch(58% 0.030 65)",
+                border: "1px solid oklch(26% 0.017 65)",
+                borderRadius: 6,
+                padding: "4px 11px",
+                fontSize: 12,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              🏆 <span style={{ letterSpacing: "0.03em" }}>Leaderboard</span>
+            </button>
             <span style={{ fontSize: 11, color: "oklch(38% 0.020 65)" }}>
               by{" "}
               <a
@@ -1002,16 +1081,115 @@ export default function App() {
                       alignItems: "center",
                       justifyContent: "center",
                       gap: 10,
+                      padding: "0 16px",
                     }}
                   >
                     <span style={{ fontSize: 20, fontWeight: 700 }}>
                       Game Over
                     </span>
-                    <span
-                      style={{ fontSize: 12, color: "oklch(48% 0.022 65)" }}
-                    >
-                      {score.toLocaleString()} pts · {moveCount} moves
+                    <span style={{ fontSize: 12, color: "oklch(48% 0.022 65)" }}>
+                      {score.toLocaleString()} pts · {moveCount} moves · best {maxTile.toLocaleString()}
                     </span>
+
+                    {/* ── Submit section */}
+                    {submitted ? (
+                      <div style={{ fontSize: 12, color: "oklch(65% 0.14 75)", display: "flex", alignItems: "center", gap: 5 }}>
+                        ✓ Score submitted!
+                      </div>
+                    ) : !submitOpen ? (
+                      <button
+                        onClick={() => setSubmitOpen(true)}
+                        style={{
+                          background: "none",
+                          border: "1px solid oklch(34% 0.06 75)",
+                          color: "oklch(62% 0.12 75)",
+                          borderRadius: 5,
+                          padding: "5px 14px",
+                          fontSize: 12,
+                          fontWeight: 500,
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        🏆 Submit Score
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", maxWidth: 210 }}>
+                        <input
+                          type="text"
+                          value={playerName}
+                          onChange={(e) => setPlayerName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleSubmitScore(); }}
+                          placeholder="Your name"
+                          autoFocus
+                          style={{
+                            background: "oklch(19% 0.014 65)",
+                            color: "oklch(82% 0.04 75)",
+                            border: "1px solid oklch(30% 0.018 65)",
+                            borderRadius: 4,
+                            padding: "5px 9px",
+                            fontSize: 12,
+                            outline: "none",
+                            fontFamily: "inherit",
+                          }}
+                        />
+                        <input
+                          type="text"
+                          value={strategyNameInput}
+                          onChange={(e) => setStrategyNameInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleSubmitScore(); }}
+                          placeholder="Strategy name"
+                          style={{
+                            background: "oklch(19% 0.014 65)",
+                            color: "oklch(82% 0.04 75)",
+                            border: "1px solid oklch(30% 0.018 65)",
+                            borderRadius: 4,
+                            padding: "5px 9px",
+                            fontSize: 12,
+                            outline: "none",
+                            fontFamily: "inherit",
+                          }}
+                        />
+                        {submitError && (
+                          <span style={{ fontSize: 11, color: "oklch(62% 0.15 22)" }}>
+                            {submitError}
+                          </span>
+                        )}
+                        <div style={{ display: "flex", gap: 5 }}>
+                          <button
+                            onClick={handleSubmitScore}
+                            disabled={isSubmitting}
+                            style={{
+                              flex: 1,
+                              background: "oklch(75% 0.18 75)",
+                              color: "oklch(14% 0.012 65)",
+                              borderRadius: 4,
+                              padding: "6px 0",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              fontFamily: "inherit",
+                              opacity: isSubmitting ? 0.65 : 1,
+                            }}
+                          >
+                            {isSubmitting ? "…" : "Submit"}
+                          </button>
+                          <button
+                            onClick={() => setSubmitOpen(false)}
+                            style={{
+                              background: "oklch(20% 0.014 65)",
+                              color: "oklch(50% 0.025 65)",
+                              border: "1px solid oklch(28% 0.018 65)",
+                              borderRadius: 4,
+                              padding: "6px 10px",
+                              fontSize: 12,
+                              fontFamily: "inherit",
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <button
                       onClick={handleRun}
                       style={{
@@ -1022,6 +1200,7 @@ export default function App() {
                         fontSize: 13,
                         fontWeight: 600,
                         marginTop: 4,
+                        fontFamily: "inherit",
                       }}
                     >
                       ▶ Run Again
@@ -1246,6 +1425,217 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════
+          LEADERBOARD MODAL
+          Click backdrop to close; click inside to keep open.
+      ══════════════════════════════════════════════════════════ */}
+      {lbOpen && (
+        <div
+          onClick={() => setLbOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 300,
+            background: "oklch(10% 0.010 65 / 0.82)",
+            backdropFilter: "blur(5px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "oklch(17% 0.013 65)",
+              border: "1px solid oklch(26% 0.017 65)",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 700,
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              boxShadow: "0 24px 64px oklch(5% 0.01 65 / 0.7)",
+            }}
+          >
+            {/* Modal header */}
+            <div
+              style={{
+                flexShrink: 0,
+                padding: "14px 18px",
+                borderBottom: "1px solid oklch(22% 0.016 65)",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <span style={{ fontSize: 17 }}>🏆</span>
+              <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                Leaderboard
+              </span>
+              <span style={{ fontSize: 11, color: "oklch(38% 0.019 65)", marginLeft: 2 }}>
+                top 20 per grid size
+              </span>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => setLbOpen(false)}
+                style={{
+                  background: "none",
+                  color: "oklch(44% 0.020 65)",
+                  fontSize: 18,
+                  lineHeight: 1,
+                  padding: "2px 4px",
+                  borderRadius: 4,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Grid size filter */}
+            <div
+              style={{
+                flexShrink: 0,
+                padding: "10px 18px",
+                borderBottom: "1px solid oklch(22% 0.016 65)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ fontSize: 10, letterSpacing: "0.10em", color: "oklch(40% 0.020 65)", marginRight: 2 }}>
+                GRID
+              </span>
+              {[3, 4, 5, 6, 8].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setLbGridFilter(n)}
+                  style={{
+                    borderRadius: 4,
+                    padding: "3px 11px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    border: "1px solid",
+                    fontFamily: "inherit",
+                    borderColor: lbGridFilter === n ? "oklch(75% 0.18 75)" : "oklch(26% 0.017 65)",
+                    background:  lbGridFilter === n ? "oklch(75% 0.18 75)" : "oklch(20% 0.014 65)",
+                    color:       lbGridFilter === n ? "oklch(14% 0.012 65)" : "oklch(52% 0.030 65)",
+                    transition: "all 0.12s",
+                  }}
+                >
+                  {n}×{n}
+                </button>
+              ))}
+            </div>
+
+            {/* Table / empty / loading */}
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {lbLoading ? (
+                <div style={{ padding: 48, textAlign: "center", color: "oklch(42% 0.020 65)", fontSize: 13 }}>
+                  Loading…
+                </div>
+              ) : lbEntries.length === 0 ? (
+                <div style={{ padding: 48, textAlign: "center", color: "oklch(42% 0.020 65)", fontSize: 13 }}>
+                  No entries yet for {lbGridFilter}×{lbGridFilter} — be the first!
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "oklch(15% 0.012 65)", position: "sticky", top: 0 }}>
+                        {(["#", "Player", "Strategy", "Score", "Best", "Moves", "Seed", ""] as string[]).map((h) => (
+                          <th
+                            key={h}
+                            style={{
+                              padding: "9px 12px",
+                              textAlign: h === "Score" || h === "Best" || h === "Moves" ? "right" : "left",
+                              fontWeight: 600,
+                              fontSize: 10,
+                              letterSpacing: "0.08em",
+                              color: "oklch(40% 0.020 65)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lbEntries.map((entry, i) => (
+                        <tr
+                          key={entry.id}
+                          className="lb-row"
+                          style={{ borderTop: "1px solid oklch(21% 0.015 65)" }}
+                        >
+                          <td style={{ padding: "10px 12px", color: i < 3 ? "oklch(75% 0.18 75)" : "oklch(40% 0.020 65)", fontWeight: 700, width: 32, whiteSpace: "nowrap" }}>
+                            {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
+                          </td>
+                          <td style={{ padding: "10px 12px", color: "oklch(82% 0.04 75)", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {entry.playerName}
+                          </td>
+                          <td style={{ padding: "10px 12px", color: "oklch(58% 0.030 65)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {entry.strategyName}
+                          </td>
+                          <td style={{ padding: "10px 12px", color: "oklch(75% 0.18 75)", fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }}>
+                            {entry.score.toLocaleString()}
+                          </td>
+                          <td style={{ padding: "10px 12px", color: "oklch(68% 0.04 75)", textAlign: "right", whiteSpace: "nowrap" }}>
+                            {entry.maxTile.toLocaleString()}
+                          </td>
+                          <td style={{ padding: "10px 12px", color: "oklch(46% 0.022 65)", textAlign: "right", whiteSpace: "nowrap" }}>
+                            {entry.moveCount.toLocaleString()}
+                          </td>
+                          <td style={{ padding: "10px 12px", color: "oklch(38% 0.018 65)", fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 10, whiteSpace: "nowrap" }}>
+                            {entry.seedHex}
+                          </td>
+                          <td style={{ padding: "10px 12px" }}>
+                            <button
+                              className="lb-load"
+                              onClick={() => handleLoadEntry(entry)}
+                              title="Load this seed + strategy into the editor"
+                              style={{
+                                background: "oklch(21% 0.015 65)",
+                                color: "oklch(60% 0.10 75)",
+                                border: "1px solid oklch(27% 0.017 65)",
+                                borderRadius: 4,
+                                padding: "3px 10px",
+                                fontSize: 11,
+                                fontWeight: 500,
+                                fontFamily: "inherit",
+                                whiteSpace: "nowrap",
+                                cursor: "pointer",
+                              }}
+                            >
+                              ▶ Load
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal footer */}
+            <div
+              style={{
+                flexShrink: 0,
+                padding: "10px 18px",
+                borderTop: "1px solid oklch(22% 0.016 65)",
+                fontSize: 11,
+                color: "oklch(36% 0.018 65)",
+              }}
+            >
+              Scores are verifiable — ▶ Load copies any entry's seed + code into the editor so you can replay it exactly.
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
